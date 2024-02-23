@@ -1,7 +1,7 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import torch_geometric.graphgym.register as register
-from torch_geometric.graphgym.config import cfg
-from torch_geometric.graphgym.models.gnn import GNNPreMP
 from torch_geometric.graphgym.models.layer import (new_layer_config,
                                                    BatchNorm1dNode)
 
@@ -16,50 +16,164 @@ class FeatureEncoder(torch.nn.Module):
     Args:
         dim_in (int): Input feature dimension
     """
-    def __init__(self, dim_in):
+    def __init__(self, dim_in, cfg):
         super(FeatureEncoder, self).__init__()
         self.dim_in = dim_in
-        if cfg.dataset.node_encoder:
+        if cfg['dataset_node_encoder']:
             # Encode integer node features via nn.Embeddings
             NodeEncoder = register.node_encoder_dict[
-                cfg.dataset.node_encoder_name]
-            self.node_encoder = NodeEncoder(cfg.gnn.dim_inner)
-            if cfg.dataset.node_encoder_bn:
+                cfg['dataset_node_encoder_name']]
+            self.node_encoder = NodeEncoder(cfg['gnn_dim_inner'])
+            if cfg['dataset_node_encoder_bn']:
                 self.node_encoder_bn = BatchNorm1dNode(
-                    new_layer_config(cfg.gnn.dim_inner, -1, -1, has_act=False,
+                    new_layer_config(cfg['gnn_dim_inner'], -1, -1, has_act=False,
                                      has_bias=False, cfg=cfg))
             # Update dim_in to reflect the new dimension fo the node features
-            self.dim_in = cfg.gnn.dim_inner
-        if cfg.dataset.edge_encoder:
-            if not hasattr(cfg.gt, 'dim_edge') or cfg.gt.dim_edge is None:
-                cfg.gt.dim_edge = cfg.gt.dim_hidden
+            self.dim_in = cfg['gnn_dim_inner']
+        if cfg['dataset_edge_encoder']:
+            if not 'gt_dim_edge' not in cfg or cfg['gt_dim_edge'] is None:
+                cfg['gt_dim_edge'] = cfg['gt_dim_hidden']
 
-            if cfg.dataset.edge_encoder_name == 'ER':
-                self.edge_encoder = EREdgeEncoder(cfg.gt.dim_edge)
-            elif cfg.dataset.edge_encoder_name.endswith('+ER'):
+            if cfg['dataset_edge_encoder_name'] == 'ER':
+                self.edge_encoder = EREdgeEncoder(cfg['gt_dim_edge'])
+            elif cfg['dataset_edge_encoder_name'].endswith('+ER'):
                 EdgeEncoder = register.edge_encoder_dict[
-                    cfg.dataset.edge_encoder_name[:-3]]
-                self.edge_encoder = EdgeEncoder(cfg.gt.dim_edge - cfg.posenc_ERE.dim_pe)
-                self.edge_encoder_er = EREdgeEncoder(cfg.posenc_ERE.dim_pe, use_edge_attr=True)
+                    cfg['dataset_edge_encoder_name'][:-3]]
+                self.edge_encoder = EdgeEncoder(cfg['gt_dim_edge'] - cfg['posenc_ERE_dim_pe'])
+                self.edge_encoder_er = EREdgeEncoder(cfg['posenc_ERE_dim_pe'], use_edge_attr=True)
             else:
                 EdgeEncoder = register.edge_encoder_dict[
-                    cfg.dataset.edge_encoder_name]
-                self.edge_encoder = EdgeEncoder(cfg.gt.dim_edge)
+                    cfg['dataset_edge_encoder_name']]
+                self.edge_encoder = EdgeEncoder(cfg['gt_dim_edge'])
 
-            if cfg.dataset.edge_encoder_bn:
+            if cfg['dataset_edge_encoder_bn']:
                 self.edge_encoder_bn = BatchNorm1dNode(
-                    new_layer_config(cfg.gt.dim_edge, -1, -1, has_act=False,
+                    new_layer_config(cfg['gt_dim_edge'], -1, -1, has_act=False,
                                     has_bias=False, cfg=cfg))
 
-        if 'Exphormer' in cfg.gt.layer_type:
-            self.exp_edge_fixer = ExpanderEdgeFixer(add_edge_index=cfg.prep.add_edge_index, 
-                                                    num_virt_node=cfg.prep.num_virt_node)
+        if 'Exphormer' in cfg['gt_layer_type']:
+            self.exp_edge_fixer = ExpanderEdgeFixer(add_edge_index=cfg['prep_add_edge_index'], 
+                                                    num_virt_node=cfg['prep_num_virt_node'])
 
     def forward(self, batch):
         for module in self.children():
             batch = module(batch)
         return batch
 
+# Core basic layers
+# Input: batch; Output: batch
+class Linear(nn.Module):
+    def __init__(self, dim_in, dim_out, bias=False, **kwargs):
+        super(Linear, self).__init__()
+        self.model = nn.Linear(dim_in, dim_out, bias=bias)
+
+    def forward(self, batch):
+        if isinstance(batch, torch.Tensor):
+            batch = self.model(batch)
+        else:
+            batch.node_feature = self.model(batch.node_feature)
+        return batch
+    
+layer_dict = {}
+layer_dict['linear'] = Linear
+
+mem_inplace = False
+
+act_dict = {
+    'relu': nn.ReLU(inplace=mem_inplace),
+    'selu': nn.SELU(inplace=mem_inplace),
+    'prelu': nn.PReLU(),
+    'elu': nn.ELU(inplace=mem_inplace),
+    'lrelu_01': nn.LeakyReLU(negative_slope=0.1, inplace=mem_inplace),
+    'lrelu_025': nn.LeakyReLU(negative_slope=0.25, inplace=mem_inplace),
+    'lrelu_05': nn.LeakyReLU(negative_slope=0.5, inplace=mem_inplace),
+}
+
+class GeneralLayer(nn.Module):
+    '''General wrapper for layers'''
+    def __init__(self,
+                 name,
+                 dim_in,
+                 dim_out,
+                 cfg,
+                 has_act=True,
+                 has_bn=True,
+                 has_l2norm=False,
+                 **kwargs):
+        super(GeneralLayer, self).__init__()
+        self.has_l2norm = has_l2norm
+        has_bn = has_bn and cfg['gnn_batchnorm']
+        self.layer = layer_dict[name](dim_in,
+                                      dim_out,
+                                      bias=not has_bn,
+                                      **kwargs)
+        layer_wrapper = []
+        if has_bn:
+            layer_wrapper.append(
+                nn.BatchNorm1d(dim_out, eps=cfg['bn_eps'], momentum=cfg['bn_mom']))
+        if cfg['gnn_dropout'] > 0:
+            layer_wrapper.append(
+                nn.Dropout(p=cfg['gnn_dropout'], inplace=cfg['mem_inplace']))
+        if has_act:
+            layer_wrapper.append(act_dict[cfg['gnn_act']])
+        self.post_layer = nn.Sequential(*layer_wrapper)
+
+    def forward(self, batch):
+        batch = self.layer(batch)
+        if isinstance(batch, torch.Tensor):
+            batch = self.post_layer(batch)
+            if self.has_l2norm:
+                batch = F.normalize(batch, p=2, dim=1)
+        else:
+            batch.node_feature = self.post_layer(batch.node_feature)
+            if self.has_l2norm:
+                batch.node_feature = F.normalize(batch.node_feature,
+                                                 p=2,
+                                                 dim=1)
+        return batch
+
+class GeneralMultiLayer(nn.Module):
+    '''General wrapper for stack of layers'''
+    def __init__(self,
+                 name,
+                 num_layers,
+                 dim_in,
+                 dim_out,
+                 cfg,
+                 dim_inner=None,
+                 final_act=True,
+                 **kwargs):
+        super(GeneralMultiLayer, self).__init__()
+        dim_inner = dim_in if dim_inner is None else dim_inner
+        for i in range(num_layers):
+            d_in = dim_in if i == 0 else dim_inner
+            d_out = dim_out if i == num_layers - 1 else dim_inner
+            has_act = final_act if i == num_layers - 1 else True
+            layer = GeneralLayer(name, d_in, d_out, cfg, has_act, **kwargs)
+            self.add_module('Layer_{}'.format(i), layer)
+
+    def forward(self, batch):
+        for layer in self.children():
+            batch = layer(batch)
+        return batch
+
+def GNNPreMP(dim_in, dim_out, cfg):
+    """
+    Wrapper for NN layer before GNN message passing
+
+    Args:
+        dim_in (int): Input dimension
+        dim_out (int): Output dimension
+        num_layers (int): Number of layers
+
+    """
+    return GeneralMultiLayer('linear',
+                             cfg['gnn_layers_pre_mp'],
+                             dim_in,
+                             dim_out,
+                             cfg,
+                             dim_inner=dim_out,
+                             final_act=True)
 
 class MultiModel(torch.nn.Module):
     """Multiple layer types can be combined here.
@@ -67,83 +181,40 @@ class MultiModel(torch.nn.Module):
 
     def __init__(self, dim_in, dim_out, cfg):
         super().__init__()
-        self.encoder = FeatureEncoder(dim_in)
+        self.encoder = FeatureEncoder(dim_in, cfg)
         dim_in = self.encoder.dim_in
 
-        if cfg.gnn.layers_pre_mp > 0:
+        if cfg['gnn_layers_pre_mp'] > 0:
             self.pre_mp = GNNPreMP(
-                dim_in, cfg.gnn.dim_inner, cfg.gnn.layers_pre_mp)
-            dim_in = cfg.gnn.dim_inner
+                dim_in, cfg['gnn_dim_inner'], cfg['gnn_layers_pre_mp'])
+            dim_in = cfg['gnn_dim_inner']
 
-        assert cfg.gt.dim_hidden == cfg.gnn.dim_inner == dim_in, \
+        assert cfg['gt_dim_hidden'] == cfg['gnn_dim_inner'] == dim_in, \
             "The inner and hidden dims must match."
 
         try:
-            model_types = cfg.gt.layer_type.split('+')
+            model_types = cfg['gt_layer_type'].split('+')
         except:
-            raise ValueError(f"Unexpected layer type: {cfg.gt.layer_type}")
+            raise ValueError(f"Unexpected layer type: {cfg['gt_layer_type']}")
         layers = []
-        for _ in range(cfg.gt.layers):
+        for _ in range(cfg['gt_layers']):
             layers.append(MultiLayer(
-                dim_h=cfg.gt.dim_hidden,
+                dim_h=cfg['gt_dim_hidden'],
                 model_types=model_types,
-                num_heads=cfg.gt.n_heads,
-                pna_degrees=cfg.gt.pna_degrees,
-                equivstable_pe=cfg.posenc_EquivStableLapPE.enable,
-                dropout=cfg.gt.dropout,
-                attn_dropout=cfg.gt.attn_dropout,
-                layer_norm=cfg.gt.layer_norm,
-                batch_norm=cfg.gt.batch_norm,
-                bigbird_cfg=cfg.gt.bigbird,
-                exp_edges_cfg=cfg.prep
+                num_heads=cfg['gt_n_heads'],
+                pna_degrees=cfg['gt_pna_degrees'],
+                equivstable_pe=cfg['posenc_EquivStableLapPE_enable'],
+                dropout=cfg['gt_dropout'],
+                attn_dropout=cfg['gt_attn_dropout'],
+                layer_norm=cfg['gt_layer_norm'],
+                batch_norm=cfg['gt_batch_norm'],
+                bigbird_cfg=cfg['gt_bigbird'],
+                exp_edges_cfg=cfg.prep #RESOLVE THIS, these are multiple params
             ))
         self.layers = torch.nn.Sequential(*layers)
 
-        GNNHead = register.head_dict[cfg.gnn.head]
-        self.post_mp = GNNHead(dim_in=cfg.gnn.dim_inner, dim_out=dim_out)
-
-    def forward(self, batch):
-        for module in self.children():
-            batch = module(batch)
-        return batch
-
-
-class SingleModel(torch.nn.Module):
-    """A single layer type can be used without FFN between the layers.
-    """
-
-    def __init__(self, dim_in, dim_out):
-        super().__init__()
-        self.encoder = FeatureEncoder(dim_in)
-        dim_in = self.encoder.dim_in
-
-        if cfg.gnn.layers_pre_mp > 0:
-            self.pre_mp = GNNPreMP(
-                dim_in, cfg.gnn.dim_inner, cfg.gnn.layers_pre_mp)
-            dim_in = cfg.gnn.dim_inner
-
-        assert cfg.gt.dim_hidden == cfg.gnn.dim_inner == dim_in, \
-            "The inner and hidden dims must match."
-
-        layers = []
-        for _ in range(cfg.gt.layers):
-            layers.append(SingleLayer(
-                dim_h=cfg.gt.dim_hidden,
-                model_type=cfg.gt.layer_type,
-                num_heads=cfg.gt.n_heads,
-                pna_degrees=cfg.gt.pna_degrees,
-                equivstable_pe=cfg.posenc_EquivStableLapPE.enable,
-                dropout=cfg.gt.dropout,
-                attn_dropout=cfg.gt.attn_dropout,
-                layer_norm=cfg.gt.layer_norm,
-                batch_norm=cfg.gt.batch_norm,
-                bigbird_cfg=cfg.gt.bigbird,
-                exp_edges_cfg=cfg.prep
-            ))
-        self.layers = torch.nn.Sequential(*layers)
-
-        GNNHead = register.head_dict[cfg.gnn.head]
-        self.post_mp = GNNHead(dim_in=cfg.gnn.dim_inner, dim_out=dim_out)
+        GNNHead = register.head_dict[cfg['gnn_head']]
+        self.post_mp = GNNHead(dim_in=cfg['gnn_dim_inner'], dim_out=dim_out)
 
     def forward(self, batch):
         for module in self.children():

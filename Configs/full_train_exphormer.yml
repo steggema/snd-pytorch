@@ -23,3 +23,22 @@ final_dropout: 0.1 # The dropout of the final layer
 feature_dropout: 0.0 # This is the dropout within the GNN convolutions
 spatial_dropout: 0.0
 class_weights: [2., 1.5, 1., 0.3, 1.]
+
+gt_layer_type: CustomGatedGCN+Exphormer
+gt_layers: 4
+gt_n_heads: 8
+gt_dim_hidden: 96  # `gt.dim_hidden` must match `gnn.dim_inner`
+gt_dropout: 0.15
+gt_attn_dropout: 0.5
+gt_layer_norm: False
+gt_batch_norm: True
+
+gnn_head: inductive_node
+gnn_layers_pre_mp: 0
+gnn_layers_post_mp: 3
+gnn_dim_inner: 96  # `gt.dim_hidden` must match `gnn.dim_inner`
+gnn_batchnorm: True
+gnn_act: relu
+gnn_dropout: 0.0
+gnn_agg: mean
+gnn_normalize_adj: False
