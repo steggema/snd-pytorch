@@ -9,7 +9,6 @@ from graphgps.layer.multi_model_layer import MultiLayer, SingleLayer
 from graphgps.encoder.ER_edge_encoder import EREdgeEncoder
 from graphgps.encoder.exp_edge_fixer import ExpanderEdgeFixer
 
-
 class FeatureEncoder(torch.nn.Module):
     """
     Encoding node and edge features
@@ -66,7 +65,7 @@ class MultiModel(torch.nn.Module):
     """Multiple layer types can be combined here.
     """
 
-    def __init__(self, dim_in, dim_out):
+    def __init__(self, dim_in, dim_out, cfg):
         super().__init__()
         self.encoder = FeatureEncoder(dim_in)
         dim_in = self.encoder.dim_in
