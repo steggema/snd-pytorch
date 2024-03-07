@@ -130,6 +130,3 @@ class GatedGCNLayer(pyg_nn.conv.MessagePassing):
         e_out = self.e
         del self.e
         return x, e_out
-
-
-@register_layer('gatedgcnconv')

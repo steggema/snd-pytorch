@@ -8,11 +8,11 @@ from torch_geometric.data import Batch
 from torch_geometric.nn import Linear as Linear_pyg
 from torch_geometric.utils import to_dense_batch
 
-from graphgps.layer.gatedgcn_layer import GatedGCNLayer
-from graphgps.layer.gine_conv_layer import GINEConvESLapPE
-from graphgps.layer.bigbird_layer import SingleBigBirdLayer
-from graphgps.layer.ETransformer import ETransformer
-from graphgps.layer.Exphormer import ExphormerAttention
+from .gated_gcn_layer import GatedGCNLayer
+from .gine_conv_layer import GINEConvESLapPE
+# from .layer.bigbird_layer import SingleBigBirdLayer
+from .etransformer import ETransformer
+from .exphormer import ExphormerAttention
 
 
 class LocalModel(nn.Module):
@@ -162,16 +162,16 @@ class GlobalModel(nn.Module):
         elif global_model_type == 'Exphormer':
             self.self_attn = ExphormerAttention(dim_h, dim_h, num_heads,
                                           use_bias=False, 
-                                          use_virt_nodes= exp_edges_cfg.num_virt_node > 0)
+                                          use_virt_nodes= exp_edges_cfg['prep_num_virt_node'] > 0)
         elif global_model_type == 'Performer':
             self.self_attn = SelfAttention(
                 dim=dim_h, heads=num_heads,
                 dropout=self.attn_dropout, causal=False)
-        elif global_model_type == "BigBird":
-            bigbird_cfg.dim_hidden = dim_h
-            bigbird_cfg.n_heads = num_heads
-            bigbird_cfg.dropout = dropout
-            self.self_attn = SingleBigBirdLayer(bigbird_cfg)
+        # elif global_model_type == "BigBird":
+        #     bigbird_cfg.dim_hidden = dim_h
+        #     bigbird_cfg.n_heads = num_heads
+        #     bigbird_cfg.dropout = dropout
+        #     self.self_attn = SingleBigBirdLayer(bigbird_cfg)
         else:
             raise ValueError(f"Unsupported global x-former model: "
                              f"{global_model_type}")

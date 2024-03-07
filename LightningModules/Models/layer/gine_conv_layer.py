@@ -112,6 +112,3 @@ class GINEConvLayer(nn.Module):
             batch.x = x_in + batch.x  # residual connection
 
         return batch
-
-
-@register_layer('gineconv')

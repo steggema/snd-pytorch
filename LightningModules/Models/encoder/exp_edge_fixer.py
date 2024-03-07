@@ -1,29 +1,27 @@
 import torch
 import torch.nn as nn
 
-from torch_geometric.graphgym.config import cfg
-
 
 class ExpanderEdgeFixer(nn.Module):
     '''
         Gets the batch and sets new edge indices + global nodes
     '''
-    def __init__(self, add_edge_index=False, num_virt_node=0):
+    def __init__(self, cfg, add_edge_index=False, num_virt_node=0):
         
         super().__init__()
 
-        if not hasattr(cfg.gt, 'dim_edge') or cfg.gt.dim_edge is None:
-            cfg.gt.dim_edge = cfg.gt.dim_hidden
+        if not getattr(cfg, 'gt_dim_edge', None):
+            cfg['gt_dim_edge'] = cfg['gt_dim_hidden']
 
         self.add_edge_index = add_edge_index
         self.num_virt_node = num_virt_node
-        self.exp_edge_attr = nn.Embedding(1, cfg.gt.dim_edge)
-        self.use_exp_edges = cfg.prep.use_exp_edges and cfg.prep.exp
+        self.exp_edge_attr = nn.Embedding(1, cfg['gt_dim_edge'])
+        self.use_exp_edges = cfg['prep_use_exp_edges'] and cfg['prep_exp']
 
         if self.num_virt_node > 0:
-            self.virt_node_emb = nn.Embedding(self.num_virt_node, cfg.gt.dim_hidden)
-            self.virt_edge_out_emb = nn.Embedding(self.num_virt_node, cfg.gt.dim_edge)
-            self.virt_edge_in_emb = nn.Embedding(self.num_virt_node, cfg.gt.dim_edge)
+            self.virt_node_emb = nn.Embedding(self.num_virt_node, cfg['gt_dim_hidden'])
+            self.virt_edge_out_emb = nn.Embedding(self.num_virt_node, cfg['gt_dim_edge'])
+            self.virt_edge_in_emb = nn.Embedding(self.num_virt_node, cfg['gt_dim_edge'])
 
 
     def forward(self, batch):

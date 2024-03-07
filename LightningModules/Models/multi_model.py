@@ -5,9 +5,14 @@ import torch_geometric.graphgym.register as register
 from torch_geometric.graphgym.models.layer import (new_layer_config,
                                                    BatchNorm1dNode)
 
-from graphgps.layer.multi_model_layer import MultiLayer, SingleLayer
-from graphgps.encoder.ER_edge_encoder import EREdgeEncoder
-from graphgps.encoder.exp_edge_fixer import ExpanderEdgeFixer
+import torch_geometric.graphgym.models.act
+
+from .layer.multi_model_layer import MultiLayer, SingleLayer
+from .encoder.er_edge_encoder import EREdgeEncoder
+from .encoder.exp_edge_fixer import ExpanderEdgeFixer
+from .encoder.linear_node_encoder import LinearNodeEncoder
+from .encoder.dummy_edge_encoder import DummyEdgeEncoder
+from .head.inductive_node import GNNInductiveNodeHead
 
 class FeatureEncoder(torch.nn.Module):
     """
@@ -21,9 +26,10 @@ class FeatureEncoder(torch.nn.Module):
         self.dim_in = dim_in
         if cfg['dataset_node_encoder']:
             # Encode integer node features via nn.Embeddings
+            print(register.node_encoder_dict)
             NodeEncoder = register.node_encoder_dict[
                 cfg['dataset_node_encoder_name']]
-            self.node_encoder = NodeEncoder(cfg['gnn_dim_inner'])
+            self.node_encoder = NodeEncoder(cfg['gnn_dim_inner'], dim_in)
             if cfg['dataset_node_encoder_bn']:
                 self.node_encoder_bn = BatchNorm1dNode(
                     new_layer_config(cfg['gnn_dim_inner'], -1, -1, has_act=False,
@@ -31,7 +37,7 @@ class FeatureEncoder(torch.nn.Module):
             # Update dim_in to reflect the new dimension fo the node features
             self.dim_in = cfg['gnn_dim_inner']
         if cfg['dataset_edge_encoder']:
-            if not 'gt_dim_edge' not in cfg or cfg['gt_dim_edge'] is None:
+            if  not getattr(cfg, 'gt_dim_edge', None):
                 cfg['gt_dim_edge'] = cfg['gt_dim_hidden']
 
             if cfg['dataset_edge_encoder_name'] == 'ER':
@@ -52,7 +58,7 @@ class FeatureEncoder(torch.nn.Module):
                                     has_bias=False, cfg=cfg))
 
         if 'Exphormer' in cfg['gt_layer_type']:
-            self.exp_edge_fixer = ExpanderEdgeFixer(add_edge_index=cfg['prep_add_edge_index'], 
+            self.exp_edge_fixer = ExpanderEdgeFixer(cfg, add_edge_index=cfg['prep_add_edge_index'], 
                                                     num_virt_node=cfg['prep_num_virt_node'])
 
     def forward(self, batch):
@@ -80,7 +86,8 @@ layer_dict['linear'] = Linear
 mem_inplace = False
 
 act_dict = {
-    'relu': nn.ReLU(inplace=mem_inplace),
+    # 'relu': nn.ReLU(inplace=mem_inplace),
+    'relu': nn.ReLU,
     'selu': nn.SELU(inplace=mem_inplace),
     'prelu': nn.PReLU(),
     'elu': nn.ELU(inplace=mem_inplace),
@@ -88,6 +95,8 @@ act_dict = {
     'lrelu_025': nn.LeakyReLU(negative_slope=0.25, inplace=mem_inplace),
     'lrelu_05': nn.LeakyReLU(negative_slope=0.5, inplace=mem_inplace),
 }
+
+register.act_dict = act_dict
 
 class GeneralLayer(nn.Module):
     '''General wrapper for layers'''
@@ -202,19 +211,19 @@ class MultiModel(torch.nn.Module):
                 dim_h=cfg['gt_dim_hidden'],
                 model_types=model_types,
                 num_heads=cfg['gt_n_heads'],
-                pna_degrees=cfg['gt_pna_degrees'],
-                equivstable_pe=cfg['posenc_EquivStableLapPE_enable'],
+                pna_degrees=getattr(cfg, 'gt_pna_degrees', None),
+                equivstable_pe=getattr(cfg, 'posenc_EquivStableLapPE_enable', None),
                 dropout=cfg['gt_dropout'],
                 attn_dropout=cfg['gt_attn_dropout'],
                 layer_norm=cfg['gt_layer_norm'],
                 batch_norm=cfg['gt_batch_norm'],
-                bigbird_cfg=cfg['gt_bigbird'],
-                exp_edges_cfg=cfg.prep #RESOLVE THIS, these are multiple params
+                # bigbird_cfg=cfg['gt_bigbird'],
+                exp_edges_cfg=cfg 
             ))
         self.layers = torch.nn.Sequential(*layers)
 
         GNNHead = register.head_dict[cfg['gnn_head']]
-        self.post_mp = GNNHead(dim_in=cfg['gnn_dim_inner'], dim_out=dim_out)
+        self.post_mp = GNNHead(dim_in=cfg['gnn_dim_inner'], dim_out=dim_out, cfg=cfg)
 
     def forward(self, batch):
         for module in self.children():
