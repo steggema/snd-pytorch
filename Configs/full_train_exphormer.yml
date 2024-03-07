@@ -24,6 +24,19 @@ feature_dropout: 0.0 # This is the dropout within the GNN convolutions
 spatial_dropout: 0.0
 class_weights: [2., 1.5, 1., 0.3, 1.]
 
+prep_exp: True
+prep_exp_deg: 3  # Algorithm will use 3 permutations or 3 Hamiltonian cycles, so actual degree will be 6
+prep_add_edge_index: True # Set True if you want to add real edges beside expander edges
+prep_num_virt_node: 0 # Set True if you want to add global node connections beside expander edges
+prep_use_exp_edges: False
+
+dataset_node_encoder: True
+dataset_node_encoder_name: LinearNode
+dataset_node_encoder_bn: False
+dataset_edge_encoder: True
+dataset_edge_encoder_name: DummyEdge
+dataset_edge_encoder_bn: False
+
 gt_layer_type: CustomGatedGCN+Exphormer
 gt_layers: 4
 gt_n_heads: 8
