@@ -12,7 +12,7 @@ from .encoder.er_edge_encoder import EREdgeEncoder
 from .encoder.exp_edge_fixer import ExpanderEdgeFixer
 from .encoder.linear_node_encoder import LinearNodeEncoder
 from .encoder.dummy_edge_encoder import DummyEdgeEncoder
-from .head.inductive_node import GNNInductiveNodeHead
+from .head.graph import GNNGraphHead
 
 class FeatureEncoder(torch.nn.Module):
     """

@@ -1,12 +1,12 @@
 # Data params
 input_dir: /data2/steggema/snd/pt/
 artifacts: /home/steggema/snd/artifacts/
-project: SNDRecoWithNC
+project: SNDRecoExphormer
 model: Exphormer
 nodes: 1
 
 # Dataset parameters
-data_split: [1440000, 504000, 504000]
+data_split: [144000, 50400, 50400] # [1440000, 504000, 504000]
 feature_set: [vertical, strip_x, strip_y, strip_z, strip_x_end, strip_y_end, strip_z_end, det]
 nb_classes: 5
 
@@ -23,6 +23,10 @@ final_dropout: 0.1 # The dropout of the final layer
 feature_dropout: 0.0 # This is the dropout within the GNN convolutions
 spatial_dropout: 0.0
 class_weights: [2., 1.5, 1., 0.3, 1.]
+
+# graph_construction: fully_connected # this crashes badly
+
+model_graph_pooling: max
 
 prep_exp: True
 prep_exp_deg: 3  # Algorithm will use 3 permutations or 3 Hamiltonian cycles, so actual degree will be 6
@@ -46,7 +50,7 @@ gt_attn_dropout: 0.5
 gt_layer_norm: False
 gt_batch_norm: True
 
-gnn_head: inductive_node
+gnn_head: mygraph
 gnn_layers_pre_mp: 0
 gnn_layers_post_mp: 3
 gnn_dim_inner: 96  # `gt.dim_hidden` must match `gnn.dim_inner`

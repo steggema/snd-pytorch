@@ -19,5 +19,8 @@ class Exphormer(GNNBase):
         self.model = MultiModel(input_dim, output_dim, hparams)
 
     def forward(self, batch):
-        
-        return self.model.forward(batch)
+        batch.x = self.concat_feature_set(batch)
+        # Add dummy edge_index
+        batch.edge_index = torch.empty([2, 0], dtype=torch.long, device=batch.batch.device)
+        pred = self.model.forward(batch)
+        return pred
