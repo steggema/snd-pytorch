@@ -33,7 +33,7 @@ def new_layer_config(
         dropout=getattr(cfg, 'gnn_dropout', 0.0),
         has_act=has_act,
         final_act=True,
-        act=getattr(cfg, 'gnn_act', 'relu'),
+        act='relu_plain',# getattr(cfg, 'gnn_act', 'relu'),
         has_bias=has_bias,
         keep_edge=getattr(cfg, 'gnn_keep_edge', 0.5),
         dim_inner=getattr(cfg, 'gnn_dim_inner', 16),

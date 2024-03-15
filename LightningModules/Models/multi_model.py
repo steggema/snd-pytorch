@@ -77,7 +77,7 @@ class Linear(nn.Module):
         if isinstance(batch, torch.Tensor):
             batch = self.model(batch)
         else:
-            batch.node_feature = self.model(batch.node_feature)
+            batch.x = self.model(batch.x)
         return batch
     
 layer_dict = {}
@@ -86,8 +86,8 @@ layer_dict['linear'] = Linear
 mem_inplace = False
 
 act_dict = {
-    # 'relu': nn.ReLU(inplace=mem_inplace),
-    'relu': nn.ReLU,
+    'relu': nn.ReLU, #(inplace=mem_inplace),
+    'relu_plain': nn.ReLU(), # for compatibility with pyg graphgym...
     'selu': nn.SELU(inplace=mem_inplace),
     'prelu': nn.PReLU(),
     'elu': nn.ELU(inplace=mem_inplace),
@@ -134,9 +134,9 @@ class GeneralLayer(nn.Module):
             if self.has_l2norm:
                 batch = F.normalize(batch, p=2, dim=1)
         else:
-            batch.node_feature = self.post_layer(batch.node_feature)
+            batch.x = self.post_layer(batch.x)
             if self.has_l2norm:
-                batch.node_feature = F.normalize(batch.node_feature,
+                batch.x = F.normalize(batch.x,
                                                  p=2,
                                                  dim=1)
         return batch
@@ -195,7 +195,7 @@ class MultiModel(torch.nn.Module):
 
         if cfg['gnn_layers_pre_mp'] > 0:
             self.pre_mp = GNNPreMP(
-                dim_in, cfg['gnn_dim_inner'], cfg['gnn_layers_pre_mp'])
+                dim_in, cfg['gnn_dim_inner'], cfg)
             dim_in = cfg['gnn_dim_inner']
 
         assert cfg['gt_dim_hidden'] == cfg['gnn_dim_inner'] == dim_in, \
