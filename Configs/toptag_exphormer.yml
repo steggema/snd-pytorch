@@ -1,32 +1,37 @@
 # Data params
-input_dir: /data2/steggema/snd/pt/
-artifacts: /home/steggema/snd/artifacts/
-project: SNDRecoExphormer
-model: Exphormer
+input_dir: /data2/steggema/toptagtest/
+artifacts: /data2/steggema/toptagtest/artifacts/
+project: ExphormerTopTag
+model: Exphormer # GravNet
 nodes: 1
 
 # Dataset parameters
-data_split: [1440000, 504000, 504000]
-feature_set: [vertical, strip_x, strip_y, strip_z, strip_x_end, strip_y_end, strip_z_end, det]
-nb_classes: 5
+data_split: [1200000,400000,400000]
+feature_set: [pE, py, px, pz, delta_eta, log_delta_E, delta_phi, log_pt, log_E, log_delta_pt, delta_pt, delta_E, delta_R,
+              jet_pt, jet_mass, jet_phi, jet_eta, jet_pE, jet_px, jet_py, jet_pz]
+nb_classes: 1
 
 # Training params
 max_epochs: 10
-lr: 0.002
-factor: 0.93
+lr: 0.003 # 0.005
+factor: 0.8
 patience: 2
 warmup: 10
 scheduler: StepLR
-train_batch: 200
-val_batch: 200
-class_weights: [2., 1.5, 1., 0.3, 1.]
+train_batch: 400 # 800
+val_batch: 400 # 800
+final_dropout: 0.2 # The dropout of the final layer
+feature_dropout: 0. # This is the dropout within the GNN convolutions
+spatial_dropout: 0.
+signal_goal: 0.3 # The efficiency goal for the signal jets
+pos_weight: 1.
 
 # graph_construction: fully_connected # this crashes badly
 
-model_graph_pooling: max
+model_graph_pooling: mean
 
 prep_exp: True
-prep_exp_deg: 5  # Algorithm will use 3 permutations or 3 Hamiltonian cycles, so actual degree will be 6
+prep_exp_deg: 8  # Algorithm will use 3 permutations or 3 Hamiltonian cycles, so actual degree will be 6
 prep_add_edge_index: True # Set True if you want to add real edges beside expander edges
 prep_num_virt_node: 2 # Set True if you want to add global node connections beside expander edges
 prep_use_exp_edges: False
@@ -38,7 +43,7 @@ dataset_edge_encoder: True
 dataset_edge_encoder_name: DummyEdge
 dataset_edge_encoder_bn: False
 
-gt_layer_type: CustomGatedGCN+Exphormer # GCN+Exphormer 
+gt_layer_type: GCN+Exphormer # GCN+Exphormer 
 gt_layers: 4
 gt_n_heads: 8
 gt_dim_hidden: 96  # `gt.dim_hidden` must match `gnn.dim_inner`
@@ -48,14 +53,15 @@ gt_layer_norm: False
 gt_batch_norm: True
 
 gnn_head: mygraph
-gnn_layers_pre_mp: 2
+gnn_layers_pre_mp: 3
 gnn_layers_post_mp: 3
 gnn_dim_inner: 96  # `gt.dim_hidden` must match `gnn.dim_inner`
 gnn_batchnorm: True
 gnn_act: relu_plain
-gnn_dropout: 0.0
+gnn_dropout: 0.1
 gnn_agg: mean
 gnn_normalize_adj: False
 
 bn_eps: 0.00001
 bn_mom: 0.1
+mem_inplace: False
