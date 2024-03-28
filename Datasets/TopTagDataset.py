@@ -12,21 +12,21 @@ from torch_geometric.data import download_url
 
 default_feature_scales = {
     'jet_pt': 1000.,
-    'log_delta_pt': 10.,
+    'jet_px': 1000.,
+    'jet_py': 1000.,
+    'jet_pz': 1000.,
+    'jet_pE': 1000.,
     'jet_mass': 100.,
-    'pE': 100.,
     'jet_phi': 3.14159,
     'jet_eta': 3.14159,
-    'jet_px': 1000.,
+    'pE': 100.,
     'px': 100.,
-    'jet_pz': 1000.,
+    'py': 100.,
+    'pz': 100.,
     'log_delta_E': 10.,
-    'jet_pE': 1000.,
+    'log_delta_pt': 10.,   
     'log_E': 10.,
     'log_pt': 10.,
-    'py': 100.,
-    'jet_py': 1000.,
-    'pz': 100.,
 }
 
 class TopTagDataset(InMemoryDataset):
@@ -70,15 +70,15 @@ class TopTagDataset(InMemoryDataset):
             jet_batch = []
             for jet_id, jet_tuple in enumerate(tqdm(data.itertuples(), total=len(data))):
                 jet_batch.append(self.hdf5_to_pyg_event((jet_tuple, jet_id), self.feature_scales))
-            print(f"Saving batch to file {output_file}")
+            print(f"Saving to file {output_file}")
             self.save(jet_batch, output_file)
 
 
-    def build_all_features(self, jet) -> Data:
+    def build_all_features(self, jet, feature_scales) -> Data:
         p = self.get_four_momenta(jet)
         y = torch.tensor(jet.is_signal_new)
 
-        pt, eta, phi, delta_eta, delta_phi, jet_p4, jet_pt, jet_eta, jet_phi = self.get_higher_features(p)
+        pt, delta_eta, delta_phi, jet_p4, jet_pt, jet_eta, jet_phi = self.get_higher_features(p)
         delta_pt = pt / jet_pt
         log_delta_pt = torch.log(delta_pt)
         delta_E = p[:, 0] / jet_p4[0]
@@ -86,29 +86,35 @@ class TopTagDataset(InMemoryDataset):
         delta_R = torch.sqrt( delta_eta**2 + delta_phi**2 )
         jet_mass = torch.sqrt(jet_p4[0]**2 - jet_p4[1]**2 - jet_p4[2]**2 - jet_p4[3]**2)
 
-        pyg_jet = Data(pE=p[:, 0], px=p[:, 1], py=p[:, 2], pz=p[:, 3], 
-                            y=y,
-                            log_pt=torch.log(pt), 
-                            log_E=torch.log(p[:, 0]),
-                            delta_pt=delta_pt,
-                            log_delta_pt=log_delta_pt,
-                            delta_E=delta_E,
-                            log_delta_E=log_delta_E,
-                            delta_R=delta_R,
-                            delta_eta=delta_eta,
-                            delta_phi=delta_phi,
-                            jet_pt=jet_pt,
-                            jet_pE=jet_p4[0],
-                            jet_px=jet_p4[1],
-                            jet_py=jet_p4[2],
-                            jet_pz=jet_p4[3],
-                            jet_mass=jet_mass,
-                            jet_eta=jet_eta,
-                            jet_phi=jet_phi)
+        x = torch.stack([
+            p[:, 0]/feature_scales['pE'], 
+            p[:, 1]/feature_scales['px'],
+            p[:, 2]/feature_scales['py'],
+            p[:, 3]/feature_scales['pz'],
+            torch.log(pt)/feature_scales['log_pt'], 
+            torch.log(p[:, 0])/feature_scales['log_E'], 
+            delta_pt, 
+            log_delta_pt/feature_scales['log_delta_pt'], 
+            delta_E, 
+            log_delta_E, 
+            delta_R, 
+            delta_eta, 
+            delta_phi
+            ], axis=1)
 
-        # Convert all to float
-        for key in pyg_jet.keys():
-            pyg_jet[key] = pyg_jet[key].float()
+        pyg_jet = Data(x=x, y=y, num_nodes=len(delta_E),
+                       jet_pt=jet_pt/feature_scales['jet_pt'],
+                       jet_pE=jet_p4[0]/feature_scales['jet_pE'], 
+                       jet_px=jet_p4[1]/feature_scales['jet_px'], 
+                       jet_py=jet_p4[2]/feature_scales['jet_py'],
+                       jet_pz=jet_p4[3]/feature_scales['jet_pz'],
+                       jet_mass=jet_mass/feature_scales['jet_mass'],
+                       jet_eta=jet_eta/feature_scales['jet_eta'], 
+                       jet_phi=jet_phi/feature_scales['jet_phi'])
+
+        # # Convert all to float
+        # for key in pyg_jet.keys():
+        #     pyg_jet[key] = pyg_jet[key].float()
 
         return pyg_jet
 
@@ -134,7 +140,7 @@ class TopTagDataset(InMemoryDataset):
 
     def get_higher_features(self, p):
         
-        E, x, y, z = p.T
+        _, x, y, z = p.T
         pt, eta, phi = self.calc_kinematics(x,y,z)
         
         jet_p4 = p.sum(0)        
@@ -145,16 +151,12 @@ class TopTagDataset(InMemoryDataset):
         delta_phi[delta_phi > np.pi] -= 2 * np.pi
         delta_phi[delta_phi < -np.pi] += 2 * np.pi
         
-        return pt, eta, phi, delta_eta, delta_phi, jet_p4, jet_pt, jet_eta, jet_phi
+        return pt, delta_eta, delta_phi, jet_p4, jet_pt, jet_eta, jet_phi
 
     def hdf5_to_pyg_event(self, jet_entry, feature_scales) -> List[Data]:
         jet, _ = jet_entry
 
-        pyg_jet = self.build_all_features(jet)
-        if feature_scales is not None:
-            # Normalize the features
-            for feature, scale in feature_scales.items():
-                pyg_jet[feature] /= scale
+        pyg_jet = self.build_all_features(jet, feature_scales)
         
         return pyg_jet
     
