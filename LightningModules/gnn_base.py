@@ -31,45 +31,50 @@ class GNNBase(LightningModule):
         self.validation_step_outputs = []
         self.test_step_outputs = []
 
-    def setup(self, stage="fit"):
+    # def setup(self, stage="fit"):
 
-        data_split = self.hparams["data_split"].copy()
+    #     data_split = self.hparams["data_split"].copy()
 
-        if stage == "fit":
-            data_split[2] = 0 # No test set in training
-        elif stage == "test":
-            data_split[0], data_split[1] = 0, 0 # No train or val set in testing
+    #     if stage == "fit":
+    #         data_split[2] = 0 # No test set in training
+    #     elif stage == "test":
+    #         data_split[0], data_split[1] = 0, 0 # No train or val set in testing
 
-        if (self.trainset is None) and (self.valset is None) and (self.testset is None):
-            self.trainset, self.valset, self.testset = load_processed_datasets(self.hparams["input_dir"], 
-                                                        data_split,
-                                                        self.hparams["graph_construction"],
-                                                        self.hparams["feature_set"][0]
-                                                        )
+    #     if (self.trainset is None) and (self.valset is None) and (self.testset is None):
+    #         self.trainset, self.valset, self.testset = load_processed_datasets(self.hparams["input_dir"], 
+    #                                                     data_split,
+    #                                                     self.hparams["graph_construction"],
+    #                                                     self.hparams["feature_set"][0]
+    #                                                     )
         
-        try:
-            print("Defining figures of merit")
-            self.logger.experiment.define_metric("val_loss" , summary="min")
-            self.logger.experiment.define_metric("auc" , summary="max")
-            self.logger.experiment.define_metric("acc" , summary="max")
-            for i in range(self.hparams['nb_classes']):
-                self.logger.experiment.define_metric(f"acc{i}" , summary="max")
-        except Exception:
-            warnings.warn("Failed to define figures of merit, due to logger unavailable")
+    #     try:
+    #         print("Defining figures of merit")
+    #         self.logger.experiment.define_metric("val_loss" , summary="min")
+    #         self.logger.experiment.define_metric("auc" , summary="max")
+    #         self.logger.experiment.define_metric("acc" , summary="max")
+    #         for i in range(self.hparams['nb_classes']):
+    #             self.logger.experiment.define_metric(f"acc{i}" , summary="max")
+    #     except Exception:
+    #         warnings.warn("Failed to define figures of merit, due to logger unavailable")
             
-        print(time.ctime())
+    #     print(time.ctime())
         
     def concat_feature_set(self, batch):
         """
         Useful in all models to use all available features of size == len(x)
         """
-        
+
+        if not hasattr(batch, 'x') or batch.x is None:
+            batch.x = batch[self.hparams["feature_set"][0]]
+
         all_features = []
         for feature in self.hparams["feature_set"]:
+            print(feature, batch[feature].shape, len(batch[feature]))
             if len(batch[feature]) == len(batch.x):
                 all_features.append(batch[feature])
-            else:
-                all_features.append(batch[feature][batch.batch])
+                #FIXME
+            # else:
+            #     all_features.append(batch[feature][batch.batch])
         return torch.stack(all_features).T
 
     def get_metrics(self, targets, output):
@@ -111,12 +116,15 @@ class GNNBase(LightningModule):
     
     def apply_loss_function(self, output, batch):
         if self.hparams["nb_classes"] == 1:
-            return F.binary_cross_entropy_with_logits(output, batch.y) #, pos_weight=torch.tensor(self.hparams["pos_weight"]))
+            return F.binary_cross_entropy_with_logits(output, batch.y.float()) #, pos_weight=torch.tensor(self.hparams["pos_weight"]))
         else:
             return F.cross_entropy(output, batch.y, weight=torch.tensor(self.hparams["class_weights"], device=self.device)) # the version above doesn't work with multiclass and integer class labels
 
-    def training_step(self, batch, batch_idx):
-                
+    def training_step(self, batch, batch_idx, **kwargs):
+        print('in training step...')
+        print(batch)
+        print(batch_idx)
+        print(kwargs)
         output = self(batch).squeeze(-1)
 
         loss = self.apply_loss_function(output, batch)
@@ -185,23 +193,23 @@ class GNNBase(LightningModule):
         self.test_step_outputs.clear()
 
 
-    def train_dataloader(self):
-        if self.trainset is not None:
-            return DataLoader(self.trainset, batch_size=self.hparams["train_batch"], shuffle=True, num_workers=1)
-        else:
-            return None
+    # def train_dataloader(self):
+    #     if self.trainset is not None:
+    #         return DataLoader(self.trainset, batch_size=self.hparams["train_batch"], shuffle=True, num_workers=1)
+    #     else:
+    #         return None
 
-    def val_dataloader(self):
-        if self.valset is not None:
-            return DataLoader(self.valset, batch_size=self.hparams["val_batch"], num_workers=1)
-        else:
-            return None
+    # def val_dataloader(self):
+    #     if self.valset is not None:
+    #         return DataLoader(self.valset, batch_size=self.hparams["val_batch"], num_workers=1)
+    #     else:
+    #         return None
 
-    def test_dataloader(self):
-        if self.testset is not None:
-            return DataLoader(self.testset, batch_size=1, num_workers=1)
-        else:
-            return None
+    # def test_dataloader(self):
+    #     if self.testset is not None:
+    #         return DataLoader(self.testset, batch_size=1, num_workers=1)
+    #     else:
+    #         return None
 
     def configure_optimizers(self):
         optimizer = [

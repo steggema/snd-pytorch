@@ -51,7 +51,7 @@ def make_mlp(
 
 
 def open_processed_files(input_dir, n_events):
-    N_EVENTS_PER_FILE = 72800
+    N_EVENTS_PER_FILE = 100000
 
     files = os.listdir(input_dir)
     num_files = (n_events // N_EVENTS_PER_FILE) + 1 if n_events > 0 else 0
@@ -77,10 +77,9 @@ def load_processed_datasets(input_dir, data_split, graph_construction, feature_n
     val_dataset = build_processed_dataset(val_events, graph_construction, data_split[1], feature_name)
     test_dataset = build_processed_dataset(test_events, graph_construction, data_split[2], feature_name)
 
-
     return train_dataset, val_dataset, test_dataset
 
-def build_processed_dataset(events, graph_construction, n_events=None, feature='x'):
+def build_processed_dataset(events, graph_construction, n_events=None, feature='x', check_for_nan=False):
     if n_events == 0:
         return None
     
@@ -105,13 +104,14 @@ def build_processed_dataset(events, graph_construction, n_events=None, feature='
         if len(sample.x) == 0:
             empty_rows.append(i)
 
-        # Check if any nan values in sample
-        for key in sample.keys():
-            bad = torch.isnan(sample[key]).any()
-            if bad:
-                print('Nan value found in sample in column', key)
-                sample[key][torch.isnan(sample[key])] = -999.
-                # assert not bad, "Nan value found in sample"
+        if check_for_nan:
+            # Check if any nan values in sample
+            for key in sample.keys():
+                bad = torch.isnan(sample[key]).any()
+                if bad:
+                    print('Nan value found in sample in column', key)
+                    sample[key][torch.isnan(sample[key])] = -999.
+                    # assert not bad, "Nan value found in sample"
     if len(empty_rows) > 0:
         print('WARNING: Found', len(empty_rows), 'empty rows, removing')
         for empty_row in reversed(empty_rows):

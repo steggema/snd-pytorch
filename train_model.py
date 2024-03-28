@@ -12,6 +12,7 @@ except Exception:
     use_wandb = False
 
 from pytorch_lightning import Trainer
+from torch_geometric.data.lightning.datamodule import LightningDataset
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torchinfo import summary
 import warnings
@@ -21,15 +22,9 @@ from LightningModules.Models.gravnet import GravNet
 from LightningModules.Models.gravnetext import GravNetExt
 from LightningModules.Models.exphormer import Exphormer
 
-from pytorch_lightning.strategies import DDPStrategy as DDPPlugin
-from pytorch_lightning.overrides.base import _LightningModuleWrapperBase as LightningDistributedModule
+from Datasets.TopTagDataset import TopTagDataset
 
-class CustomDDPPlugin(DDPPlugin):
-    '''FIXME - do we really need the custom plugin?'''
-    def configure_ddp(self):
-        self._model = self._setup_model(LightningDistributedModule(self.model))  # type: ignore
-        self._register_ddp_hooks()
-        self._model._set_static_graph()  # type: ignore
+from pytorch_lightning.strategies import DDPStrategy
 
 
 @click.command()
@@ -86,18 +81,26 @@ def train(config):
 
     trainer = Trainer(
         accelerator = accelerator,
-        devices="auto",
+        # devices="auto",
+        devices=1,
         num_nodes=config["nodes"],
         max_epochs=config["max_epochs"],
         logger=logger,
-        strategy=CustomDDPPlugin(find_unused_parameters=False),
+        # strategy=CustomDDPPlugin(find_unused_parameters=False),
+        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
         callbacks=[checkpoint_callback],
         default_root_dir=default_root_dir
     )
 
     summary(model)
-    print(model)
-    trainer.fit(model, ckpt_path=config["checkpoint"])
+    # print(model)
+
+    # dataset = LightningDataset(TopTagDataset('/data2/steggema/toptagtest/'), batch_size=config["train_batch"])
+
+    from torch_geometric.data import DataLoader
+    dataset = DataLoader(TopTagDataset('/data2/steggema/toptagtest/'), batch_size=config["train_batch"], shuffle=True, num_workers=1)
+
+    trainer.fit(model, dataset, ckpt_path=config["checkpoint"])
 
 
 if __name__ == "__main__":

@@ -6,34 +6,29 @@ model: Exphormer # GravNet
 nodes: 1
 
 # Dataset parameters
-data_split: [1200000,400000,400000]
-feature_set: [pE, py, px, pz, delta_eta, log_delta_E, delta_phi, log_pt, log_E, log_delta_pt, delta_pt, delta_E, delta_R,
-              jet_pt, jet_mass, jet_phi, jet_eta, jet_pE, jet_px, jet_py, jet_pz]
+data_split: [1200000,400000, 0]
+feature_set: [pE, py, px, pz, delta_eta, log_delta_E, delta_phi, log_pt, log_E, log_delta_pt, delta_pt, delta_E, delta_R] #,
+              #jet_pt, jet_mass, jet_phi, jet_eta, jet_pE, jet_px, jet_py, jet_pz]
 nb_classes: 1
 
 # Training params
-max_epochs: 10
+max_epochs: 20
 lr: 0.003 # 0.005
-factor: 0.8
+factor: 0.93
 patience: 2
 warmup: 10
-scheduler: StepLR
+scheduler: StepLR #  CosineWarmLR
 train_batch: 400 # 800
 val_batch: 400 # 800
-final_dropout: 0.2 # The dropout of the final layer
-feature_dropout: 0. # This is the dropout within the GNN convolutions
-spatial_dropout: 0.
-signal_goal: 0.3 # The efficiency goal for the signal jets
-pos_weight: 1.
 
 # graph_construction: fully_connected # this crashes badly
 
 model_graph_pooling: mean
 
 prep_exp: True
-prep_exp_deg: 8  # Algorithm will use 3 permutations or 3 Hamiltonian cycles, so actual degree will be 6
+prep_exp_deg: 10  # Algorithm will use 3 permutations or 3 Hamiltonian cycles, so actual degree will be 6
 prep_add_edge_index: True # Set True if you want to add real edges beside expander edges
-prep_num_virt_node: 2 # Set True if you want to add global node connections beside expander edges
+prep_num_virt_node: 6 # Set True if you want to add global node connections beside expander edges
 prep_use_exp_edges: False
 
 dataset_node_encoder: True
@@ -49,14 +44,14 @@ gt_n_heads: 8
 gt_dim_hidden: 96  # `gt.dim_hidden` must match `gnn.dim_inner`
 gt_dropout: 0.1 # 0.15
 gt_attn_dropout: 0.1 # 0.5
-gt_layer_norm: False
-gt_batch_norm: True
+gt_layer_norm: True
+gt_batch_norm: False
 
 gnn_head: mygraph
 gnn_layers_pre_mp: 3
 gnn_layers_post_mp: 3
 gnn_dim_inner: 96  # `gt.dim_hidden` must match `gnn.dim_inner`
-gnn_batchnorm: True
+gnn_batchnorm: False
 gnn_act: relu_plain
 gnn_dropout: 0.1
 gnn_agg: mean
