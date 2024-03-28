@@ -1,4 +1,5 @@
 # Data params
+dataset: SND
 input_dir: /data2/steggema/snd/pt/
 artifacts: /home/steggema/snd/artifacts/
 project: SNDRecoWithNC
@@ -8,6 +9,7 @@ nodes: 1
 # Dataset parameters
 data_split: [1440000, 504000, 504000]
 feature_set: [vertical, strip_x, strip_y, strip_z, strip_x_end, strip_y_end, strip_z_end, det]
+global_feature_set: []
 nb_classes: 5
 
 # Training params

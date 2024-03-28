@@ -13,6 +13,7 @@ except Exception:
 
 from pytorch_lightning import Trainer
 from torch_geometric.data.lightning.datamodule import LightningDataset
+from torch_geometric.data import DataLoader
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torchinfo import summary
 import warnings
@@ -23,6 +24,12 @@ from LightningModules.Models.gravnetext import GravNetExt
 from LightningModules.Models.exphormer import Exphormer
 
 from Datasets.TopTagDataset import TopTagDataset
+from Datasets.SNDDataset import SNDDataset
+
+datasets = {
+    'TopTag': TopTagDataset,
+    'SND': SNDDataset
+}
 
 from pytorch_lightning.strategies import DDPStrategy
 
@@ -93,12 +100,10 @@ def train(config):
     )
 
     summary(model)
-    # print(model)
-
-    # dataset = LightningDataset(TopTagDataset('/data2/steggema/toptagtest/'), batch_size=config["train_batch"])
-
-    from torch_geometric.data import DataLoader
-    dataset = DataLoader(TopTagDataset('/data2/steggema/toptagtest/'), batch_size=config["train_batch"], shuffle=True, num_workers=1)
+    
+    
+    dataset = DataLoader(datasets[config['dataset']]('/data2/steggema/snd/pt'), batch_size=config["train_batch"], shuffle=True, num_workers=1)
+    # dataset = LightningDataset(datasets[config['dataset']]('/data2/steggema/toptagtest/'), batch_size=config["train_batch"])
 
     trainer.fit(model, dataset, ckpt_path=config["checkpoint"])
 
