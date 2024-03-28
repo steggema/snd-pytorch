@@ -39,6 +39,9 @@ class SNDDataset(InMemoryDataset):
         for i, input_file in enumerate(tqdm(self.raw_file_names)):
             input = torch.load(input_file)
             for e in input:
+                if len(e.vertical) == 0:
+                    continue
+
                 x = torch.stack([e.vertical, e.strip_x, e.strip_y, e.strip_z, e.strip_x_end, e.strip_y_end, e.strip_z_end, e.det]).T
                 batch.append(Data(x=x, y=e.y, start_z=e.start_z, pz=e.pz))
             

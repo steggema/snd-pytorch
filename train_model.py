@@ -88,8 +88,8 @@ def train(config):
 
     trainer = Trainer(
         accelerator = accelerator,
-        # devices="auto",
-        devices=1,
+        devices="auto",
+        # devices=1,
         num_nodes=config["nodes"],
         max_epochs=config["max_epochs"],
         logger=logger,
