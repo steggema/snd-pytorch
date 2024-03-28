@@ -72,7 +72,6 @@ class GravNet(GNNBase):
         return self.output_network(graph_level_inputs)
 
     def forward(self, batch, log_attention=False):
-
         x = self.concat_feature_set(batch)
 
         # Encode all features

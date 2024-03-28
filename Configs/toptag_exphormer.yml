@@ -1,4 +1,5 @@
 # Data params
+dataset: TopTag
 input_dir: /data2/steggema/toptagtest/
 artifacts: /data2/steggema/toptagtest/artifacts/
 project: ExphormerTopTag
@@ -7,8 +8,9 @@ nodes: 1
 
 # Dataset parameters
 data_split: [1200000,400000, 0]
-feature_set: [pE, py, px, pz, delta_eta, log_delta_E, delta_phi, log_pt, log_E, log_delta_pt, delta_pt, delta_E, delta_R] #,
-              #jet_pt, jet_mass, jet_phi, jet_eta, jet_pE, jet_px, jet_py, jet_pz]
+feature_set: [pE, py, px, pz, delta_eta, log_delta_E, delta_phi, log_pt, log_E, log_delta_pt, delta_pt, delta_E, delta_R] # Note that with using pyg datasets, the main purpose of this list is to assign names to the entries in the "x" tensor, and to define the length of it
+
+global_feature_set: [jet_pt, jet_mass, jet_phi, jet_eta, jet_pE, jet_px, jet_py, jet_pz] # per-jet features
 nb_classes: 1
 
 # Training params

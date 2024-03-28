@@ -1,18 +1,10 @@
-import sys, os
-import logging
-import time
 import warnings
 
-import pytorch_lightning as pl
 from pytorch_lightning import LightningModule
 import torch.nn.functional as F
-from torch.nn import Linear
-from torch_geometric.data import DataLoader
 import torch
 import numpy as np
-from sklearn.metrics import roc_auc_score, roc_curve
-
-from .utils import load_processed_datasets
+from sklearn.metrics import roc_auc_score
 
 class GNNBase(LightningModule):
     
@@ -31,51 +23,34 @@ class GNNBase(LightningModule):
         self.validation_step_outputs = []
         self.test_step_outputs = []
 
-    # def setup(self, stage="fit"):
-
-    #     data_split = self.hparams["data_split"].copy()
-
-    #     if stage == "fit":
-    #         data_split[2] = 0 # No test set in training
-    #     elif stage == "test":
-    #         data_split[0], data_split[1] = 0, 0 # No train or val set in testing
-
-    #     if (self.trainset is None) and (self.valset is None) and (self.testset is None):
-    #         self.trainset, self.valset, self.testset = load_processed_datasets(self.hparams["input_dir"], 
-    #                                                     data_split,
-    #                                                     self.hparams["graph_construction"],
-    #                                                     self.hparams["feature_set"][0]
-    #                                                     )
-        
-    #     try:
-    #         print("Defining figures of merit")
-    #         self.logger.experiment.define_metric("val_loss" , summary="min")
-    #         self.logger.experiment.define_metric("auc" , summary="max")
-    #         self.logger.experiment.define_metric("acc" , summary="max")
-    #         for i in range(self.hparams['nb_classes']):
-    #             self.logger.experiment.define_metric(f"acc{i}" , summary="max")
-    #     except Exception:
-    #         warnings.warn("Failed to define figures of merit, due to logger unavailable")
-            
-    #     print(time.ctime())
+    def setup(self, stage="fit"):
+        try:
+            print("Defining figures of merit")
+            self.logger.experiment.define_metric("val_loss" , summary="min")
+            self.logger.experiment.define_metric("auc" , summary="max")
+            self.logger.experiment.define_metric("acc" , summary="max")
+            for i in range(self.hparams['nb_classes']):
+                self.logger.experiment.define_metric(f"acc{i}" , summary="max")
+        except Exception:
+            warnings.warn("Failed to define figures of merit, due to logger unavailable")
         
     def concat_feature_set(self, batch):
         """
-        Useful in all models to use all available features of size == len(x)
+        Concatenates per-node features and possibly global features.
+        - If `batch.x` does not exist already, it is created from the (per-node) feature_set
+        - Items in the global_feature_set are stacked on top of batch.x
+
         """
-
-        if not hasattr(batch, 'x') or batch.x is None:
-            batch.x = batch[self.hparams["feature_set"][0]]
-
         all_features = []
-        for feature in self.hparams["feature_set"]:
-            print(feature, batch[feature].shape, len(batch[feature]))
-            if len(batch[feature]) == len(batch.x):
+        if not hasattr(batch, 'x') or batch.x is None:
+            for feature in self.hparams["feature_set"]:
                 all_features.append(batch[feature])
-                #FIXME
-            # else:
-            #     all_features.append(batch[feature][batch.batch])
-        return torch.stack(all_features).T
+            batch.x = torch.stack(all_features).T
+
+        for feature in self.hparams["global_feature_set"]:
+            batch.x = torch.cat([batch.x, torch.unsqueeze(batch[feature][batch.batch], dim=1)], dim=1)
+
+        return batch.x
 
     def get_metrics(self, targets, output):
         
@@ -121,10 +96,6 @@ class GNNBase(LightningModule):
             return F.cross_entropy(output, batch.y, weight=torch.tensor(self.hparams["class_weights"], device=self.device)) # the version above doesn't work with multiclass and integer class labels
 
     def training_step(self, batch, batch_idx, **kwargs):
-        print('in training step...')
-        print(batch)
-        print(batch_idx)
-        print(kwargs)
         output = self(batch).squeeze(-1)
 
         loss = self.apply_loss_function(output, batch)
@@ -191,25 +162,6 @@ class GNNBase(LightningModule):
     def on_test_epoch_end(self):
         self.shared_end_step(self.test_step_outputs)
         self.test_step_outputs.clear()
-
-
-    # def train_dataloader(self):
-    #     if self.trainset is not None:
-    #         return DataLoader(self.trainset, batch_size=self.hparams["train_batch"], shuffle=True, num_workers=1)
-    #     else:
-    #         return None
-
-    # def val_dataloader(self):
-    #     if self.valset is not None:
-    #         return DataLoader(self.valset, batch_size=self.hparams["val_batch"], num_workers=1)
-    #     else:
-    #         return None
-
-    # def test_dataloader(self):
-    #     if self.testset is not None:
-    #         return DataLoader(self.testset, batch_size=1, num_workers=1)
-    #     else:
-    #         return None
 
     def configure_optimizers(self):
         optimizer = [
